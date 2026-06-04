@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+from time import perf_counter
 from dataclasses import dataclass, field
 from datetime import datetime
+from html import escape
 from io import BytesIO
 from pathlib import Path
 
@@ -227,85 +229,412 @@ def load_translator():
 def load_history():
     return TranslationHistory()
 
+def apply_theme():
+    st.markdown(
+        """
+        <style>
+        :root {
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --line: #d8e0ea;
+            --ink: #0f172a;
+            --muted: #5f6f84;
+            --brand: #0f766e;
+            --brand-dark: #115e59;
+            --accent: #2563eb;
+            --success-bg: #ecfdf5;
+            --success-line: #a7f3d0;
+            --warn-bg: #fff7ed;
+            --warn-line: #fed7aa;
+        }
+        .main .block-container {
+            max-width: 1220px;
+            padding-top: 2rem;
+            padding-bottom: 3rem;
+        }
+        h1, h2, h3 {
+            letter-spacing: 0;
+        }
+        .app-hero {
+            border: 1px solid var(--line);
+            background:
+                radial-gradient(circle at 14% 18%, rgba(20, 184, 166, .22), transparent 28%),
+                radial-gradient(circle at 92% 12%, rgba(37, 99, 235, .20), transparent 30%),
+                linear-gradient(135deg, #f8fafc 0%, #ecfeff 48%, #eef2ff 100%);
+            background-size: 160% 160%;
+            padding: 28px 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            animation: heroFlow 9s ease-in-out infinite alternate;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .08);
+        }
+        .app-hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -8% -35% 45%;
+            height: 160px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+            transform: rotate(-8deg);
+            animation: sheen 5s ease-in-out infinite;
+        }
+        .app-title {
+            color: var(--ink);
+            font-size: 34px;
+            font-weight: 800;
+            margin: 0;
+            position: relative;
+            z-index: 1;
+        }
+        .app-subtitle {
+            color: var(--muted);
+            font-size: 16px;
+            margin-top: 8px;
+            max-width: 860px;
+            line-height: 1.55;
+            position: relative;
+            z-index: 1;
+        }
+        .metric-row {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin: 16px 0 8px;
+        }
+        .metric-card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 14px 16px;
+            transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+            animation: riseIn .5s ease both;
+        }
+        .metric-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(15, 118, 110, .35);
+            box-shadow: 0 14px 34px rgba(15, 23, 42, .10);
+        }
+        .metric-label {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            font-weight: 750;
+        }
+        .metric-value {
+            color: var(--ink);
+            font-size: 20px;
+            font-weight: 800;
+            margin-top: 4px;
+        }
+        .section-panel {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 16px;
+            animation: riseIn .55s ease both;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
+        }
+        .panel-title {
+            color: var(--ink);
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+        .panel-help {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 14px;
+        }
+        .output-box {
+            background: var(--success-bg);
+            border: 1px solid var(--success-line);
+            border-radius: 8px;
+            padding: 18px;
+            margin-top: 16px;
+            position: relative;
+            overflow: hidden;
+            animation: outputPop .38s ease both;
+        }
+        .output-box::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            background: linear-gradient(#10b981, #0f766e);
+            animation: pulseBar 1.9s ease-in-out infinite;
+        }
+        .output-label {
+            color: #166534;
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            margin-bottom: 8px;
+        }
+        .output-text {
+            color: #052e16;
+            font-size: 21px;
+            line-height: 1.65;
+            font-weight: 650;
+            word-break: break-word;
+        }
+        .status-pill {
+            display: inline-block;
+            background: #e0f2fe;
+            color: #075985;
+            border: 1px solid #bae6fd;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: 750;
+            margin-top: 10px;
+            animation: softPulse 2.4s ease-in-out infinite;
+        }
+        .stButton > button {
+            border-radius: 7px;
+            font-weight: 750;
+            transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(15, 118, 110, .18);
+        }
+        .stTextArea textarea, .stSelectbox div[data-baseweb="select"], .stFileUploader section {
+            transition: border-color .18s ease, box-shadow .18s ease;
+        }
+        .stTextArea textarea:focus {
+            border-color: rgba(15, 118, 110, .55) !important;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, .12) !important;
+        }
+        div[data-testid="stTabs"] button {
+            font-weight: 750;
+            transition: color .18s ease, background .18s ease;
+        }
+        div[data-testid="stTabs"] button:hover {
+            color: var(--brand-dark);
+        }
+        div[data-testid="stTabs"] [aria-selected="true"] {
+            color: var(--brand-dark);
+        }
+        @keyframes heroFlow {
+            from { background-position: 0% 50%; }
+            to { background-position: 100% 50%; }
+        }
+        @keyframes sheen {
+            0%, 35% { transform: translateX(-70%) rotate(-8deg); opacity: 0; }
+            50% { opacity: .75; }
+            100% { transform: translateX(70%) rotate(-8deg); opacity: 0; }
+        }
+        @keyframes riseIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes outputPop {
+            from { opacity: 0; transform: scale(.985) translateY(8px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes pulseBar {
+            0%, 100% { opacity: .55; }
+            50% { opacity: 1; }
+        }
+        @keyframes softPulse {
+            0%, 100% { box-shadow: 0 0 0 rgba(14, 165, 233, 0); }
+            50% { box-shadow: 0 0 0 5px rgba(14, 165, 233, .10); }
+        }
+        @media (max-width: 760px) {
+            .metric-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .app-title {
+                font-size: 27px;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_metric(label: str, value: str):
+    st.markdown(
+        f"""
+        <div class="metric-card">
+            <div class="metric-label">{label}</div>
+            <div class="metric-value">{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 st.set_page_config(page_title="Multilingual Translator", layout="wide")
-st.title("Multilingual Language Translation System")
-st.caption("India-focused multilingual translation using Transformers")
+apply_theme()
+st.markdown(
+    """
+    <div class="app-hero">
+        <div class="app-title">Multilingual Language Translation System</div>
+        <div class="app-subtitle">
+            A Transformer-based translation workspace for Indian languages with text translation,
+            speech input, voice output, architecture visualization, and SQLite translation history.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+metric_cols = st.columns(4)
+with metric_cols[0]:
+    render_metric("Languages", "22 + English")
+with metric_cols[1]:
+    render_metric("Model", "NLLB Distilled")
+with metric_cols[2]:
+    render_metric("Mode", "Fast Demo")
+with metric_cols[3]:
+    render_metric("Storage", "SQLite")
 
 history = load_history()
 language_names = list(LANGUAGE_OPTIONS.keys())
 translate_tab, architecture_tab, history_tab = st.tabs(["Translate", "Architecture", "History"])
 
 with translate_tab:
-    source_mode = st.radio("Source language mode", ["Manual selection", "Automatic detection"], horizontal=True)
-    st.info("Fast demo mode: use 25 words or fewer for quicker translation. The first translation can still take longer because the model loads into memory.")
-    col1, col2 = st.columns(2)
-    with col1:
+    st.markdown('<div class="section-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Translation Workspace</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-help">Fast demo mode is optimized for short inputs. Use 25 words or fewer after the model has loaded.</div>',
+        unsafe_allow_html=True,
+    )
+
+    mode_col, source_col, target_col = st.columns([1.2, 1, 1])
+    with mode_col:
+        source_mode = st.radio(
+            "Source mode",
+            ["Manual selection", "Automatic detection"],
+            horizontal=True,
+        )
+    with source_col:
         source_language = st.selectbox("Source language", language_names)
-    with col2:
+    with target_col:
         target_language = st.selectbox("Target language", language_names, index=1)
 
-    text = st.text_area("Enter text", height=160)
+    input_col, tools_col = st.columns([1.45, 1])
+    with input_col:
+        text = st.text_area(
+            "Text to translate",
+            height=190,
+            placeholder="Enter a short sentence for faster translation...",
+        )
+        word_count = len(text.split())
+        st.caption(f"Word count: {word_count}/25")
+        translate_clicked = st.button("Translate Text", type="primary", use_container_width=True)
 
-    st.subheader("Voice input")
-    speech_language = st.selectbox("Speech language", language_names, key="speech_language")
-    st.caption("Use clear audio with low background noise. WAV, AIFF, or FLAC is recommended.")
-    audio_file = st.file_uploader("Upload WAV, AIFF, or FLAC audio", type=["wav", "aiff", "aif", "flac"])
-    if st.button("Convert voice to text") and audio_file is not None:
-        try:
-            st.session_state.voice_text = speech_to_text(audio_file, speech_language)
-            st.success("Voice converted to text")
-        except Exception as exc:
-            st.error(f"Speech recognition failed: {exc}")
+    with tools_col:
+        st.markdown('<div class="panel-title">Voice Input</div>', unsafe_allow_html=True)
+        speech_language = st.selectbox("Speech language", language_names, key="speech_language")
+        st.caption("Use clear WAV, AIFF, or FLAC audio with low background noise.")
+        audio_file = st.file_uploader(
+            "Upload audio",
+            type=["wav", "aiff", "aif", "flac"],
+        )
+        if st.button("Convert Voice To Text", use_container_width=True) and audio_file is not None:
+            try:
+                st.session_state.voice_text = speech_to_text(audio_file, speech_language)
+                st.success("Voice converted to text.")
+            except Exception as exc:
+                st.error(f"Speech recognition failed: {exc}")
 
-    if "voice_text" in st.session_state:
-        st.text_area("Recognized text", st.session_state.voice_text, height=100)
-        if st.button("Use recognized text"):
-            text = st.session_state.voice_text
+        if "voice_text" in st.session_state:
+            st.text_area("Recognized text", st.session_state.voice_text, height=92)
+            if st.button("Use Recognized Text", use_container_width=True):
+                text = st.session_state.voice_text
 
-    if st.button("Translate", type="primary"):
+    if translate_clicked:
         try:
             translator = load_translator()
             for warning in translator.quality_warnings(text, source_mode):
                 st.warning(warning)
             actual_source_language = translator.detect_language(text) if source_mode == "Automatic detection" else source_language
+            started_at = perf_counter()
             translated_text = translator.translate(text, actual_source_language, target_language)
+            elapsed = perf_counter() - started_at
             history.add(actual_source_language, target_language, text, translated_text)
             st.session_state.latest_translation = translated_text
             st.session_state.latest_target_language = target_language
-            st.subheader("Translation")
-            st.write(translated_text)
-            st.info(f"Source: {actual_source_language} | Target: {target_language}")
+            st.session_state.latest_source_language = actual_source_language
+            st.session_state.latest_elapsed = elapsed
         except Exception as exc:
             st.error(f"Translation failed: {exc}")
 
     if "latest_translation" in st.session_state:
-        st.subheader("Voice output")
-        if st.button("Generate speech"):
-            try:
-                audio_bytes = text_to_speech_bytes(
-                    st.session_state.latest_translation,
-                    st.session_state.latest_target_language,
-                )
-                st.audio(audio_bytes, format="audio/mp3")
-            except Exception as exc:
-                st.error(f"Text-to-speech failed: {exc}")
+        safe_translation = escape(st.session_state.latest_translation)
+        safe_source = escape(st.session_state.latest_source_language)
+        safe_target = escape(st.session_state.latest_target_language)
+        st.markdown(
+            f"""
+            <div class="output-box">
+                <div class="output-label">Translated Text</div>
+                <div class="output-text">{safe_translation}</div>
+                <div class="status-pill">
+                    {safe_source} to {safe_target}
+                    | {st.session_state.latest_elapsed:.2f}s after model load
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        voice_col, copy_col = st.columns([1, 1])
+        with voice_col:
+            if st.button("Generate Voice Output", use_container_width=True):
+                try:
+                    audio_bytes = text_to_speech_bytes(
+                        st.session_state.latest_translation,
+                        st.session_state.latest_target_language,
+                    )
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception as exc:
+                    st.error(f"Text-to-speech failed: {exc}")
+        with copy_col:
+            st.download_button(
+                "Download Translation",
+                data=st.session_state.latest_translation,
+                file_name="translation.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with architecture_tab:
-    st.subheader("Project Architecture")
+    st.markdown('<div class="section-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Project Architecture</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-help">The model uses encoder-decoder Transformer layers with attention, cross-attention, and Softmax.</div>',
+        unsafe_allow_html=True,
+    )
     st.graphviz_chart(ARCHITECTURE_DOT, use_container_width=True)
-    st.write("Softmax is used inside attention to create attention weights and at the decoder output to create token probabilities.")
+    st.info("Softmax is used inside attention to create attention weights and at the decoder output to create token probabilities.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with history_tab:
-    st.subheader("Translation History")
+    st.markdown('<div class="section-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Translation History</div>', unsafe_allow_html=True)
     records = history.recent()
     if not records:
-        st.write("No translation history yet.")
+        st.info("No translation history yet.")
     for source_language, target_language, source_text, translated_text, created_at in records:
         with st.expander(f"{source_language} to {target_language} - {created_at}"):
-            st.write("Input")
-            st.write(source_text)
-            st.write("Output")
-            st.write(translated_text)
+            left, right = st.columns(2)
+            with left:
+                st.caption("Input")
+                st.write(source_text)
+            with right:
+                st.caption("Output")
+                st.write(translated_text)
     if records and st.button("Clear history"):
         history.clear()
         st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
