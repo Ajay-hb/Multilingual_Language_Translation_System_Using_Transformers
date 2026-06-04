@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -89,11 +89,8 @@ class TransformerTranslator:
     model_name: str = "facebook/nllb-200-1.3B"
     max_length: int = 256
     num_beams: int = 5
-    num_beams: int = 5
-
-    def __post_init__(self):
-        self._tokenizer = None
-        self._model = None
+    _tokenizer: object | None = field(default=None, init=False, repr=False)
+    _model: object | None = field(default=None, init=False, repr=False)
 
     def _load_model(self):
         if self._tokenizer is not None and self._model is not None:
