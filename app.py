@@ -235,17 +235,17 @@ def apply_theme():
         <style>
         :root {
             --surface: #ffffff;
-            --surface-soft: #f8fafc;
-            --line: #d8e0ea;
-            --ink: #0f172a;
-            --muted: #5f6f84;
-            --brand: #0f766e;
-            --brand-dark: #115e59;
-            --accent: #2563eb;
-            --success-bg: #ecfdf5;
-            --success-line: #a7f3d0;
-            --warn-bg: #fff7ed;
-            --warn-line: #fed7aa;
+            --surface-soft: #f6f8fb;
+            --line: #d6deea;
+            --ink: #101828;
+            --muted: #667085;
+            --brand: #007c89;
+            --brand-dark: #005f68;
+            --accent: #f59e0b;
+            --success-bg: #f0fdfa;
+            --success-line: #99f6e4;
+            --warn-bg: #fffbeb;
+            --warn-line: #fde68a;
         }
         .main .block-container {
             max-width: 1220px;
@@ -258,9 +258,9 @@ def apply_theme():
         .app-hero {
             border: 1px solid var(--line);
             background:
-                radial-gradient(circle at 14% 18%, rgba(20, 184, 166, .22), transparent 28%),
-                radial-gradient(circle at 92% 12%, rgba(37, 99, 235, .20), transparent 30%),
-                linear-gradient(135deg, #f8fafc 0%, #ecfeff 48%, #eef2ff 100%);
+                radial-gradient(circle at 12% 18%, rgba(0, 124, 137, .20), transparent 28%),
+                radial-gradient(circle at 92% 12%, rgba(245, 158, 11, .20), transparent 30%),
+                linear-gradient(135deg, #f8fafc 0%, #f0fdfa 48%, #fff7ed 100%);
             background-size: 160% 160%;
             padding: 28px 30px;
             border-radius: 8px;
@@ -312,7 +312,7 @@ def apply_theme():
         }
         .metric-card:hover {
             transform: translateY(-3px);
-            border-color: rgba(15, 118, 110, .35);
+            border-color: rgba(0, 124, 137, .35);
             box-shadow: 0 14px 34px rgba(15, 23, 42, .10);
         }
         .metric-label {
@@ -365,11 +365,11 @@ def apply_theme():
             top: 0;
             bottom: 0;
             width: 5px;
-            background: linear-gradient(#10b981, #0f766e);
+            background: linear-gradient(#14b8a6, #007c89);
             animation: pulseBar 1.9s ease-in-out infinite;
         }
         .output-label {
-            color: #166534;
+            color: #006d77;
             font-size: 13px;
             font-weight: 800;
             text-transform: uppercase;
@@ -377,7 +377,7 @@ def apply_theme():
             margin-bottom: 8px;
         }
         .output-text {
-            color: #052e16;
+            color: #12343b;
             font-size: 21px;
             line-height: 1.65;
             font-weight: 650;
@@ -385,9 +385,9 @@ def apply_theme():
         }
         .status-pill {
             display: inline-block;
-            background: #e0f2fe;
-            color: #075985;
-            border: 1px solid #bae6fd;
+            background: #fff7ed;
+            color: #92400e;
+            border: 1px solid #fed7aa;
             border-radius: 999px;
             padding: 6px 10px;
             font-size: 13px;
@@ -402,14 +402,14 @@ def apply_theme():
         }
         .stButton > button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 28px rgba(15, 118, 110, .18);
+            box-shadow: 0 12px 28px rgba(0, 124, 137, .18);
         }
         .stTextArea textarea, .stSelectbox div[data-baseweb="select"], .stFileUploader section {
             transition: border-color .18s ease, box-shadow .18s ease;
         }
         .stTextArea textarea:focus {
-            border-color: rgba(15, 118, 110, .55) !important;
-            box-shadow: 0 0 0 3px rgba(15, 118, 110, .12) !important;
+            border-color: rgba(0, 124, 137, .55) !important;
+            box-shadow: 0 0 0 3px rgba(0, 124, 137, .12) !important;
         }
         div[data-testid="stTabs"] button {
             font-weight: 750;
@@ -443,8 +443,8 @@ def apply_theme():
             50% { opacity: 1; }
         }
         @keyframes softPulse {
-            0%, 100% { box-shadow: 0 0 0 rgba(14, 165, 233, 0); }
-            50% { box-shadow: 0 0 0 5px rgba(14, 165, 233, .10); }
+            0%, 100% { box-shadow: 0 0 0 rgba(245, 158, 11, 0); }
+            50% { box-shadow: 0 0 0 5px rgba(245, 158, 11, .13); }
         }
         @media (max-width: 760px) {
             .metric-row {
@@ -571,8 +571,11 @@ with translate_tab:
 
     if "latest_translation" in st.session_state:
         safe_translation = escape(st.session_state.latest_translation)
-        safe_source = escape(st.session_state.latest_source_language)
-        safe_target = escape(st.session_state.latest_target_language)
+        latest_source_language = st.session_state.get("latest_source_language", source_language)
+        latest_target_language = st.session_state.get("latest_target_language", target_language)
+        latest_elapsed = st.session_state.get("latest_elapsed", 0.0)
+        safe_source = escape(latest_source_language)
+        safe_target = escape(latest_target_language)
         st.markdown(
             f"""
             <div class="output-box">
@@ -580,7 +583,7 @@ with translate_tab:
                 <div class="output-text">{safe_translation}</div>
                 <div class="status-pill">
                     {safe_source} to {safe_target}
-                    | {st.session_state.latest_elapsed:.2f}s after model load
+                    | {latest_elapsed:.2f}s after model load
                 </div>
             </div>
             """,
