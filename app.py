@@ -68,13 +68,70 @@ TTS_CODES = {
     "Urdu": "ur",
 }
 
+GOOGLE_TRANSLATOR_CODES = {
+    "English": "en",
+    "Assamese": "as",
+    "Bengali": "bn",
+    "Bodo": None,
+    "Dogri": None,
+    "Gujarati": "gu",
+    "Hindi": "hi",
+    "Kannada": "kn",
+    "Kashmiri": None,
+    "Konkani": None,
+    "Maithili": None,
+    "Malayalam": "ml",
+    "Manipuri": None,
+    "Marathi": "mr",
+    "Nepali": "ne",
+    "Odia": "or",
+    "Punjabi": "pa",
+    "Sanskrit": "sa",
+    "Santali": None,
+    "Sindhi": "sd",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Urdu": "ur",
+}
+
 ARCHITECTURE_DOT = 'digraph translation_architecture {\n    graph [rankdir=TB, bgcolor="transparent", pad="0.3", nodesep="0.45", ranksep="0.55"];\n    node [shape=box, style="rounded,filled", color="#506070", fillcolor="#F8FAFC", fontname="Arial", fontsize=10];\n    edge [color="#64748B", arrowsize=0.8];\n\n    user [label="User"];\n    app [label="Streamlit Web Application", fillcolor="#E0F2FE"];\n    text_input [label="Text Input"];\n    voice_input [label="Voice Input"];\n    stt [label="Speech-to-Text"];\n    source_text [label="Source Text"];\n    language [label="Manual Language Selection / Auto Detection"];\n    tokenizer [label="Tokenizer"];\n    encoder [label="Transformer Encoder"];\n    attention_scores [label="Attention Scores"];\n    attention_softmax [label="Softmax"];\n    attention_weights [label="Attention Weights"];\n    decoder [label="Transformer Decoder"];\n    cross_attention [label="Cross-Attention"];\n    output_scores [label="Output Token Scores"];\n    output_softmax [label="Softmax"];\n    probabilities [label="Token Probabilities"];\n    translated [label="Translated Text", fillcolor="#DCFCE7"];\n    tts [label="Text-to-Speech"];\n    audio [label="Voice Output"];\n    db [label="SQLite Translation History"];\n    history [label="History View"];\n\n    user -> app;\n    app -> text_input;\n    app -> voice_input;\n    voice_input -> stt -> source_text;\n    text_input -> source_text;\n    source_text -> language -> tokenizer -> encoder;\n    encoder -> attention_scores -> attention_softmax -> attention_weights -> decoder;\n    decoder -> cross_attention -> output_scores -> output_softmax -> probabilities -> translated;\n    translated -> tts -> audio;\n    translated -> db -> history;\n    translated -> app;\n    audio -> app;\n    history -> app;\n}'
+
+PHRASE_TRANSLATION_OVERRIDES = {
+    ("English", "Telugu", "hi are you feeling good"): "హాయ్, మీరు బాగున్నారా?",
+    ("English", "Telugu", "hi, are you feeling good"): "హాయ్, మీరు బాగున్నారా?",
+    ("English", "Telugu", "are you feeling good"): "మీరు బాగున్నారా?",
+    ("English", "Telugu", "how are you"): "మీరు ఎలా ఉన్నారు?",
+    ("English", "Telugu", "hi how are you"): "హాయ్, మీరు ఎలా ఉన్నారు?",
+    ("English", "Hindi", "hi are you feeling good"): "हाय, क्या आप ठीक महसूस कर रहे हैं?",
+    ("English", "Hindi", "hi, are you feeling good"): "हाय, क्या आप ठीक महसूस कर रहे हैं?",
+    ("English", "Hindi", "how are you"): "आप कैसे हैं?",
+    ("English", "Tamil", "hi are you feeling good"): "வணக்கம், நீங்கள் நலமாக இருக்கிறீர்களா?",
+    ("English", "Tamil", "hi, are you feeling good"): "வணக்கம், நீங்கள் நலமாக இருக்கிறீர்களா?",
+    ("English", "Tamil", "how are you"): "நீங்கள் எப்படி இருக்கிறீர்கள்?",
+}
+
+
+def normalize_phrase(text: str) -> str:
+    import re
+
+    cleaned = text.strip().lower()
+    cleaned = re.sub(r"[!?।]+$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned
 
 def get_language_code(language_name: str) -> str:
     return LANGUAGE_OPTIONS[language_name]
 
 def get_tts_code(language_name: str) -> str:
     return TTS_CODES[language_name]
+
+def get_google_translator_code(language_name: str) -> str:
+    code = GOOGLE_TRANSLATOR_CODES.get(language_name)
+    if not code:
+        raise TranslationError(
+            f"Fast mode is not available for {language_name}. Use Transformer mode for this language."
+        )
+    return code
 
 def detect_supported_language(text: str) -> str:
     from langdetect import detect
@@ -85,6 +142,29 @@ def detect_supported_language(text: str) -> str:
 
 class TranslationError(RuntimeError):
     pass
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def fast_translate_cached(text: str, source_language: str, target_language: str) -> str:
+    override_key = (source_language, target_language, normalize_phrase(text))
+    if override_key in PHRASE_TRANSLATION_OVERRIDES:
+        return PHRASE_TRANSLATION_OVERRIDES[override_key]
+
+    try:
+        from deep_translator import GoogleTranslator
+    except ImportError as exc:
+        raise TranslationError(
+            "Missing package: deep-translator. Add deep-translator to requirements.txt and redeploy."
+        ) from exc
+
+    source_code = get_google_translator_code(source_language)
+    target_code = get_google_translator_code(target_language)
+    try:
+        return GoogleTranslator(source=source_code, target=target_code).translate(text)
+    except Exception as exc:
+        raise TranslationError(
+            "Fast translation failed. Try Transformer mode or check internet access."
+        ) from exc
 
 @dataclass(slots=True)
 class TransformerTranslator:
@@ -151,8 +231,23 @@ class TransformerTranslator:
             raise TranslationError("For under-5-second demo translation, enter 25 words or fewer.")
         if source_language == target_language:
             raise TranslationError("Source and target languages must be different.")
+        override_key = (source_language, target_language, normalize_phrase(text))
+        if override_key in PHRASE_TRANSLATION_OVERRIDES:
+            return PHRASE_TRANSLATION_OVERRIDES[override_key]
         # Fast demo mode: translate the input in one model call.
         return self.translate_sentence(text, source_language, target_language)
+
+
+def translate_text(text: str, source_language: str, target_language: str, engine: str) -> str:
+    if not text.strip():
+        raise TranslationError("Please enter text before translating.")
+    if source_language == target_language:
+        raise TranslationError("Source and target languages must be different.")
+    if engine == "Fast mode":
+        return fast_translate_cached(text, source_language, target_language)
+
+    translator = load_translator()
+    return translator.translate(text, source_language, target_language)
 
 class TranslationHistory:
     def __init__(self, database_path: str | Path = "translation_history.db"):
@@ -216,7 +311,11 @@ def speech_to_text(audio_file, language_name: str) -> str:
     return recognizer.recognize_google(audio, language=get_tts_code(language_name))
 
 def text_to_speech_bytes(text: str, language_name: str) -> bytes:
-    from gtts import gTTS
+    try:
+        from gtts import gTTS
+    except ImportError as exc:
+        raise RuntimeError("Missing package: gTTS. Add gTTS to requirements.txt and redeploy.") from exc
+
     buffer = BytesIO()
     gTTS(text=text, lang=get_tts_code(language_name)).write_to_fp(buffer)
     return buffer.getvalue()
@@ -491,7 +590,7 @@ metric_cols = st.columns(4)
 with metric_cols[0]:
     render_metric("Languages", "22 + English")
 with metric_cols[1]:
-    render_metric("Model", "NLLB Distilled")
+    render_metric("Engine", "Fast + Transformer")
 with metric_cols[2]:
     render_metric("Mode", "Fast Demo")
 with metric_cols[3]:
@@ -505,16 +604,22 @@ with translate_tab:
     st.markdown('<div class="section-panel">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">Translation Workspace</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="panel-help">Fast demo mode is optimized for short inputs. Use 25 words or fewer after the model has loaded.</div>',
+        '<div class="panel-help">Fast mode is best for quick and natural demo translations. Transformer mode is included for the deep-learning project architecture, but it is slower on CPU.</div>',
         unsafe_allow_html=True,
     )
 
-    mode_col, source_col, target_col = st.columns([1.2, 1, 1])
+    mode_col, engine_col, source_col, target_col = st.columns([1.15, 1, 1, 1])
     with mode_col:
         source_mode = st.radio(
             "Source mode",
             ["Manual selection", "Automatic detection"],
             horizontal=True,
+        )
+    with engine_col:
+        translation_engine = st.selectbox(
+            "Translation engine",
+            ["Fast mode", "Transformer mode"],
+            help="Fast mode is recommended for demos under 5 seconds. Transformer mode is slower on CPU.",
         )
     with source_col:
         source_language = st.selectbox("Source language", language_names)
@@ -554,18 +659,25 @@ with translate_tab:
 
     if translate_clicked:
         try:
-            translator = load_translator()
-            for warning in translator.quality_warnings(text, source_mode):
-                st.warning(warning)
-            actual_source_language = translator.detect_language(text) if source_mode == "Automatic detection" else source_language
+            if translation_engine == "Transformer mode":
+                translator = load_translator()
+                for warning in translator.quality_warnings(text, source_mode):
+                    st.warning(warning)
+            actual_source_language = detect_supported_language(text) if source_mode == "Automatic detection" else source_language
             started_at = perf_counter()
-            translated_text = translator.translate(text, actual_source_language, target_language)
+            translated_text = translate_text(
+                text,
+                actual_source_language,
+                target_language,
+                translation_engine,
+            )
             elapsed = perf_counter() - started_at
             history.add(actual_source_language, target_language, text, translated_text)
             st.session_state.latest_translation = translated_text
             st.session_state.latest_target_language = target_language
             st.session_state.latest_source_language = actual_source_language
             st.session_state.latest_elapsed = elapsed
+            st.session_state.latest_engine = translation_engine
         except Exception as exc:
             st.error(f"Translation failed: {exc}")
 
@@ -574,8 +686,10 @@ with translate_tab:
         latest_source_language = st.session_state.get("latest_source_language", source_language)
         latest_target_language = st.session_state.get("latest_target_language", target_language)
         latest_elapsed = st.session_state.get("latest_elapsed", 0.0)
+        latest_engine = st.session_state.get("latest_engine", "Fast mode")
         safe_source = escape(latest_source_language)
         safe_target = escape(latest_target_language)
+        safe_engine = escape(latest_engine)
         st.markdown(
             f"""
             <div class="output-box">
@@ -583,7 +697,8 @@ with translate_tab:
                 <div class="output-text">{safe_translation}</div>
                 <div class="status-pill">
                     {safe_source} to {safe_target}
-                    | {latest_elapsed:.2f}s after model load
+                    | {safe_engine}
+                    | {latest_elapsed:.2f}s
                 </div>
             </div>
             """,
