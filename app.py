@@ -87,7 +87,7 @@ class TranslationError(RuntimeError):
 @dataclass(slots=True)
 class TransformerTranslator:
     model_name: str = "facebook/nllb-200-distilled-600M"
-    max_length: int = 128
+    max_length: int = 64
     num_beams: int = 1
     _tokenizer: object | None = field(default=None, init=False, repr=False)
     _model: object | None = field(default=None, init=False, repr=False)
@@ -128,11 +128,12 @@ class TransformerTranslator:
     def translate_sentence(self, text: str, source_language: str, target_language: str) -> str:
         tokenizer, model = self._load_model()
         tokenizer.src_lang = get_language_code(source_language)
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=self.max_length)
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=96)
         forced_bos_token_id = tokenizer.convert_tokens_to_ids(get_language_code(target_language))
         import torch
+        torch.set_num_threads(2)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             output_tokens = model.generate(
                 **inputs,
                 forced_bos_token_id=forced_bos_token_id,
@@ -144,6 +145,8 @@ class TransformerTranslator:
     def translate(self, text: str, source_language: str, target_language: str) -> str:
         if not text.strip():
             raise TranslationError("Please enter text before translating.")
+        if len(text.split()) > 25:
+            raise TranslationError("For under-5-second demo translation, enter 25 words or fewer.")
         if source_language == target_language:
             raise TranslationError("Source and target languages must be different.")
         # Fast demo mode: translate the input in one model call.
@@ -234,7 +237,7 @@ translate_tab, architecture_tab, history_tab = st.tabs(["Translate", "Architectu
 
 with translate_tab:
     source_mode = st.radio("Source language mode", ["Manual selection", "Automatic detection"], horizontal=True)
-    st.info("For highest accuracy, keep Manual selection and choose the correct source language. Automatic detection can fail for short or mixed-language text.")
+    st.info("Fast demo mode: use 25 words or fewer for quicker translation. The first translation can still take longer because the model loads into memory.")
     col1, col2 = st.columns(2)
     with col1:
         source_language = st.selectbox("Source language", language_names)
