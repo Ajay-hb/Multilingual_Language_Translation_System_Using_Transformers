@@ -1,3 +1,153 @@
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass, field
+from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+
+import streamlit as st
+
+LANGUAGE_OPTIONS = {
+    "English": "eng_Latn",
+    "Assamese": "asm_Beng",
+    "Bengali": "ben_Beng",
+    "Bodo": "brx_Deva",
+    "Dogri": "doi_Deva",
+    "Gujarati": "guj_Gujr",
+    "Hindi": "hin_Deva",
+    "Kannada": "kan_Knda",
+    "Kashmiri": "kas_Arab",
+    "Konkani": "gom_Deva",
+    "Maithili": "mai_Deva",
+    "Malayalam": "mal_Mlym",
+    "Manipuri": "mni_Beng",
+    "Marathi": "mar_Deva",
+    "Nepali": "npi_Deva",
+    "Odia": "ory_Orya",
+    "Punjabi": "pan_Guru",
+    "Sanskrit": "san_Deva",
+    "Santali": "sat_Olck",
+    "Sindhi": "snd_Arab",
+    "Tamil": "tam_Taml",
+    "Telugu": "tel_Telu",
+    "Urdu": "urd_Arab",
+}
+
+DETECTION_CODES = {
+    "en": "English",
+    "as": "Assamese",
+    "bn": "Bengali",
+    "gu": "Gujarati",
+    "hi": "Hindi",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "mr": "Marathi",
+    "ne": "Nepali",
+    "or": "Odia",
+    "pa": "Punjabi",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "ur": "Urdu",
+}
+TTS_CODES = {
+    "English": "en",
+    "Assamese": "as",
+    "Bengali": "bn",
+    "Gujarati": "gu",
+    "Hindi": "hi",
+    "Kannada": "kn",
+    "Malayalam": "ml",
+    "Marathi": "mr",
+    "Nepali": "ne",
+    "Punjabi": "pa",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Urdu": "ur",
+}
+
+ARCHITECTURE_DOT = 'digraph translation_architecture {\n    graph [rankdir=TB, bgcolor="transparent", pad="0.3", nodesep="0.45", ranksep="0.55"];\n    node [shape=box, style="rounded,filled", color="#506070", fillcolor="#F8FAFC", fontname="Arial", fontsize=10];\n    edge [color="#64748B", arrowsize=0.8];\n\n    user [label="User"];\n    app [label="Streamlit Web Application", fillcolor="#E0F2FE"];\n    text_input [label="Text Input"];\n    voice_input [label="Voice Input"];\n    stt [label="Speech-to-Text"];\n    source_text [label="Source Text"];\n    language [label="Manual Language Selection / Auto Detection"];\n    tokenizer [label="Tokenizer"];\n    encoder [label="Transformer Encoder"];\n    attention_scores [label="Attention Scores"];\n    attention_softmax [label="Softmax"];\n    attention_weights [label="Attention Weights"];\n    decoder [label="Transformer Decoder"];\n    cross_attention [label="Cross-Attention"];\n    output_scores [label="Output Token Scores"];\n    output_softmax [label="Softmax"];\n    probabilities [label="Token Probabilities"];\n    translated [label="Translated Text", fillcolor="#DCFCE7"];\n    tts [label="Text-to-Speech"];\n    audio [label="Voice Output"];\n    db [label="SQLite Translation History"];\n    history [label="History View"];\n\n    user -> app;\n    app -> text_input;\n    app -> voice_input;\n    voice_input -> stt -> source_text;\n    text_input -> source_text;\n    source_text -> language -> tokenizer -> encoder;\n    encoder -> attention_scores -> attention_softmax -> attention_weights -> decoder;\n    decoder -> cross_attention -> output_scores -> output_softmax -> probabilities -> translated;\n    translated -> tts -> audio;\n    translated -> db -> history;\n    translated -> app;\n    audio -> app;\n    history -> app;\n}'
+
+def get_language_code(language_name: str) -> str:
+    return LANGUAGE_OPTIONS[language_name]
+
+def get_tts_code(language_name: str) -> str:
+    return TTS_CODES[language_name]
+
+def detect_supported_language(text: str) -> str:
+    from langdetect import detect
+    detected_code = detect(text)
+    if detected_code not in DETECTION_CODES:
+        raise ValueError("Automatic detection is best-effort. Use manual selection if detection fails.")
+    return DETECTION_CODES[detected_code]
+
+class TranslationError(RuntimeError):
+    pass
+
+@dataclass(slots=True)
+class TransformerTranslator:
+    model_name: str = "facebook/nllb-200-distilled-600M"
+    max_length: int = 128
+    num_beams: int = 1
+    _tokenizer: object | None = field(default=None, init=False, repr=False)
+    _model: object | None = field(default=None, init=False, repr=False)
+
+    def _load_model(self):
+        if self._tokenizer is not None and self._model is not None:
+            return self._tokenizer, self._model
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        try:
+            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self._model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+            self._model.eval()
+        except Exception as exc:
+            raise TranslationError("Model could not be loaded. Check internet access or local model cache.") from exc
+        return self._tokenizer, self._model
+
+    def detect_language(self, text: str) -> str:
+        try:
+            return detect_supported_language(text)
+        except Exception as exc:
+            raise TranslationError("Automatic language detection failed. Select the source language manually.") from exc
+
+    def split_into_sentences(self, text: str):
+        import re
+        cleaned_text = " ".join(text.split())
+        return [part.strip() for part in re.split(r"(?<=[.!??])\s+", cleaned_text) if part.strip()]
+
+    def quality_warnings(self, text: str, source_mode: str):
+        warnings = []
+        if len(text.split()) < 3:
+            warnings.append("Input is very short, so translation may be less reliable.")
+        if source_mode == "Automatic detection":
+            warnings.append("Manual source language selection gives better accuracy.")
+        if len(text) > 700:
+            warnings.append("Long text will be split into sentences for better translation quality.")
+        return warnings
+
+    def translate_sentence(self, text: str, source_language: str, target_language: str) -> str:
+        tokenizer, model = self._load_model()
+        tokenizer.src_lang = get_language_code(source_language)
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=self.max_length)
+        forced_bos_token_id = tokenizer.convert_tokens_to_ids(get_language_code(target_language))
+        import torch
+
+        with torch.no_grad():
+            output_tokens = model.generate(
+                **inputs,
+                forced_bos_token_id=forced_bos_token_id,
+                max_length=self.max_length,
+                num_beams=self.num_beams,
+            )
+        return tokenizer.batch_decode(output_tokens, skip_special_tokens=True)[0]
+
+    def translate(self, text: str, source_language: str, target_language: str) -> str:
+        if not text.strip():
+            raise TranslationError("Please enter text before translating.")
+        if source_language == target_language:
+            raise TranslationError("Source and target languages must be different.")
+        # Fast demo mode: translate the input in one model call.
+        return self.translate_sentence(text, source_language, target_language)
 
 class TranslationHistory:
     def __init__(self, database_path: str | Path = "translation_history.db"):
